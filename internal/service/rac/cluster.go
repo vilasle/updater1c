@@ -23,14 +23,15 @@ func NewClusterCommand(command string, socket string) *ClusterCommand {
 	}
 }
 
-func (cmd *ClusterCommand) Command() (string, []string) {
-	args := make([]string, 0, 2+len(cmd.args))
+func (cmd *ClusterCommand) Command() []string {
+	args := make([]string, 0)
 
+	args = append(args, clusterMainCmd)
 	args = append(args, clusterListCmd)
 	args = append(args, cmd.command)
 	args = append(args, cmd.args...)
 
-	return clusterMainCmd, args
+	return args
 }
 
 func parseClusterInfoResponse(response []byte) (map[string]string, error) {

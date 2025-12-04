@@ -85,22 +85,130 @@ func (rac *RemoteAdministrativeClient) GetInfobaseId(ctx context.Context, infoba
 	return Infobase{}, err
 }
 
-func (rac *RemoteAdministrativeClient) LockInfobase(ctx context.Context, infobaseID string, secret string) error {
+type LockInfobaseParams struct {
+	InfobaseID       string
+	AccessToken      string
+	InfobaseUser     string
+	InfobasePassword string
+}
+
+func (rac *RemoteAdministrativeClient) LockInfobase(ctx context.Context, clusterId string, lockParams LockInfobaseParams) error {
+	select {
+	default:
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+
+	command := rac.lockingCommand(true, clusterId, lockParams)
+
+	result := rac.executor.Execute(command)
+	if err := result.Error(); err != nil {
+		if err != nil {
+			return err
+		}
+	}
+
+	if result.Code() != 0 {
+		return fmt.Errorf(
+			"locking infobase failed. error info: %s; code: %d",
+			string(result.Stderr()), result.Code())
+	}
 	return nil
 }
 
-func (rac *RemoteAdministrativeClient) UnlockInfobase(ctx context.Context, infobaseID string) error {
+func (rac *RemoteAdministrativeClient) UnlockInfobase(ctx context.Context, clusterId string, lockParams LockInfobaseParams) error {
+	select {
+	default:
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+	command := rac.lockingCommand(false, clusterId, lockParams)
+
+	result := rac.executor.Execute(command)
+	if err := result.Error(); err != nil {
+		if err != nil {
+			return err
+		}
+	}
+
+	if result.Code() != 0 {
+		return fmt.Errorf(
+			"unlocking infobase failed. error info: %s; code: %d",
+			string(result.Stderr()), result.Code())
+	}
 	return nil
 }
 
-func (rac *RemoteAdministrativeClient) TerminateAllSessions(ctx context.Context, infobaseID string) error {
+func (rac *RemoteAdministrativeClient) lockingCommand(lock bool, clusterId string, lockParams LockInfobaseParams) util.Commander {
+	command := NewInfobaseCommand(infobaseUpdate, rac.socket)
+	command.SetClusterId(clusterId)
+	command.SetInfobaseId(lockParams.InfobaseID)
+	command.SetLockSession(true, lockParams.AccessToken)
+	command.SetAuth(lockParams.InfobaseUser, lockParams.InfobasePassword)
+
+	return command
+}
+
+func (rac *RemoteAdministrativeClient) TerminateAllSessions(ctx context.Context, clusterID, infobaseID string) error {
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	default:
+	}
+
+	allSessionCmd := NewSessionCommand(sessionListCommand, rac.socket)
+	allSessionCmd.SetClusterId(clusterID)
+	allSessionCmd.SetInfobaseId(infobaseID)
+
+	result := rac.executor.Execute(allSessionCmd)
+
+	if err := result.Error(); err != nil {
+		return err
+	}
+
+	if result.Code() != 0 {
+		return fmt.Errorf(
+			"getting list of sessions failed. error info: %s; code: %d",
+			string(result.Stderr()), result.Code())
+	}
+
+	ls, err := parseSessoinListResponse(result.Stdout())
+	if err != nil {
+		return err
+	}
+
+	for _, sessionID := range ls {
+		if err != rac.TerminateSession(ctx, clusterID, sessionID) {
+			if err != nil {
+				//TODO: log
+				continue
+			}
+		}
+	}
 	return nil
 }
 
-func (rac *RemoteAdministrativeClient) TerminateSession(ctx context.Context, sessionID string) error {
-	return nil
-}
+func (rac *RemoteAdministrativeClient) TerminateSession(ctx context.Context, clusterID, sessionID string) error {
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	default:
+	}
 
-func (rac *RemoteAdministrativeClient) execRACCommand(ctx context.Context, args ...string) ([]byte, error) {
-	return nil, nil
+	terminateCmd := NewSessionCommand(sessionTerminateCommand, rac.socket)
+	terminateCmd.SetClusterId(clusterID)
+	terminateCmd.SetSessionId(sessionID)
+
+	result := rac.executor.Execute(terminateCmd)
+
+	if err := result.Error(); err != nil {
+		return err
+	}
+
+	if result.Code() != 0 {
+		return fmt.Errorf(
+			"terminating session failed. error info: %s; code: %d",
+			string(result.Stderr()), result.Code())
+	}
+	return nil
 }

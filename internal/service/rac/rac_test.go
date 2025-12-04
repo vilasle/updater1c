@@ -51,3 +51,27 @@ func TestParsingInfobaseSummaryList(t *testing.T) {
 	}
 
 }
+
+func TestParsingSessionList(t *testing.T) {
+	d, err := os.ReadFile("testdata/session_list")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	want := []string{
+		"3b7d1af6-4d33-4363-989a-bf2a7beed809",
+		"5697970c-0331-452c-b64b-b273f44af189",
+		"696d034b-5396-45ce-b9e9-fef69ff8ad54",
+	}
+
+	ls, err := parseSessoinListResponse(d)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for i, got := range ls {
+		if got != want[i] {
+			t.Fatalf("unexpected session id, want %s; got: %s", want[i], got)
+		}
+	}
+}

@@ -1,7 +1,7 @@
 package util
 
 type Commander interface {
-	Command() (cmd string, args []string)
+	Command() (args []string)
 }
 
 type Executor interface {

@@ -10,6 +10,7 @@ import (
 const (
 	infobaseMainCommand    = "infobase"
 	infobaseListAllCommand = "summary list"
+	infobaseUpdate         = "update"
 )
 
 type Infobase struct {
@@ -19,11 +20,13 @@ type Infobase struct {
 }
 
 type InfobaseCommand struct {
-	clusterId  string
-	infobaseId string
-	command    string
-	auth       [2]string
-	args       []string
+	clusterId   string
+	infobaseId  string
+	command     string
+	args        []string
+	lockSession bool
+	lockCode    string
+	auth        [2]string
 }
 
 func NewInfobaseCommand(command string, socket string) *InfobaseCommand {
@@ -47,15 +50,54 @@ func (cmd *InfobaseCommand) SetAuth(user, password string) {
 	cmd.auth[1] = password
 }
 
-func (cmd *InfobaseCommand) Command() (string, []string) {
-	args := make([]string, 0, 4+len(cmd.args)+len(cmd.auth))
+func (cmd *InfobaseCommand) SetLockSession(lockSession bool, lockCode string) {
+	cmd.lockSession = true
+	cmd.lockCode = lockCode
+}
+
+func (cmd *InfobaseCommand) Command() []string {
+	args := make([]string, 0)
 
 	args = append(args, infobaseMainCommand)
 	args = append(args, cmd.command)
 	args = append(args, fmt.Sprintf("--cluster=%s", cmd.clusterId))
+
+	if cmd.command == infobaseUpdate {
+		args = append(args, cmd.infobaseUpdateArgs()...)
+	}
+
 	args = append(args, cmd.args...)
 
-	return infobaseMainCommand, args
+	return args
+}
+
+func (cmd *InfobaseCommand) infobaseUpdateArgs() []string {
+	args := make([]string, 0)
+	//add infobase id
+	args = append(args,
+		fmt.Sprintf("--infobase=%s", cmd.infobaseId),
+	)
+	//add auth infobase if exists
+	if len(cmd.auth[0]) > 0 {
+		args = append(args,
+			fmt.Sprintf("--infobase-user=%s", cmd.auth[0]),
+			fmt.Sprintf("--infobase-pwd=%s", cmd.auth[1]),
+		)
+	}
+	//add access code if exists
+	if len(cmd.lockCode) > 0 {
+		args = append(args,
+			fmt.Sprintf("--permission-code=%s", cmd.lockCode),
+		)
+	}
+
+	//set lock session mode
+	denySession := "off"
+	if cmd.lockSession {
+		denySession = "on"
+	}
+	args = append(args, fmt.Sprintf("--sessions-deny=%s", denySession))
+	return args
 }
 
 func parseInfobaseListResponse(response []byte) (map[string]Infobase, error) {
