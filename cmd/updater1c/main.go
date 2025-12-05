@@ -28,7 +28,4 @@ package main
 
 	create report and send message on telegram
 
-
-
-
 */
